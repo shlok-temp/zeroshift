@@ -40,10 +40,9 @@ BUILD_COMMANDS = {
     "dotnet": ["dotnet publish -c Release -o out"],
 }
 
-# Build and runtime are separate containers. Anything pip/gem/bundler installs
-# during the build stays in the build container unless it is either deployed as
-# a file or reinstalled in run.prepareCommands. Compiled languages ship a single
-# binary through deployFiles, so only the interpreted ones need this.
+# Build and runtime are separate containers, so anything pip installs during the
+# build is gone at runtime unless reinstalled in run.prepareCommands. Compiled
+# languages ship a binary through deployFiles and do not need this.
 RUNTIME_DEPENDENCIES = {
     "python": {"manifest": "requirements.txt", "install": "pip install -r requirements.txt"},
     "ruby": {"manifest": "Gemfile", "install": "bundle install"},
@@ -121,8 +120,7 @@ def run_section(service: MappedService) -> dict[str, Any]:
     if service.ports:
         port = service.ports[0]
         section["ports"] = [{"port": port, "httpSupport": True}]
-        # The deploy API parses this as a Go duration and rejects a bare integer,
-        # even though the published schema and the docs both type it as one.
+        # The deploy API wants a Go duration here, not the integer the schema says.
         section["healthCheck"] = {
             "httpGet": {"port": port, "path": "/"},
             "failureTimeout": HEALTH_CHECK_TIMEOUT,

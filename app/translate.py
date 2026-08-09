@@ -152,11 +152,7 @@ def parse_volumes(service: dict) -> list[Note]:
 
 
 def apply_secret_policy(service: MappedService) -> None:
-    """Never carry compose secret values into a Zerops config.
-
-    Managed services generate their own credentials, and dev-only values in a
-    compose file must not become production secrets.
-    """
+    """Never carry compose secret values into a Zerops config."""
     if service.kind in ("database", "storage"):
         if service.secrets or service.env:
             service.notes.append(Note(
@@ -326,11 +322,7 @@ def assign_priorities(services: list[MappedService], dependencies: dict[str, lis
 
 
 def assign_public_service(result: Translation) -> None:
-    """Expose exactly one service publicly; everything else stays private.
-
-    Docker services count too: a `build: .` without a recognizable runtime lands
-    here, and it is still the user's app that needs a public URL.
-    """
+    """Expose exactly one service publicly; everything else stays private."""
     candidates = [s for s in result.services if s.ports]
     if not candidates:
         return

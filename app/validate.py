@@ -72,12 +72,7 @@ def schemas_available() -> bool:
 
 @lru_cache(maxsize=1)
 def valid_build_bases() -> frozenset[str]:
-    """Bases Zerops accepts under build.base.
-
-    Read from the schema rather than hardcoded: docker, nginx and static types are
-    legal under run.base but cannot be built, and that distinction is invisible
-    until a pipeline fails.
-    """
+    """Bases Zerops accepts under build.base, read from the schema."""
     schema = load_schema("zerops-yml-schema.json")
     if not schema:
         return frozenset()

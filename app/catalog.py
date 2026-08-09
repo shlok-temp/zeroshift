@@ -1,8 +1,4 @@
-"""Zerops service catalog and Docker image mapping.
-
-Service identifiers come from the official import JSON Schema:
-https://api.app-prg1.zerops.io/api/rest/public/settings/import-project-yml-json-schema.json
-"""
+"""Zerops service catalog and Docker image mapping."""
 
 from __future__ import annotations
 
@@ -46,13 +42,7 @@ class MappedService:
 
 def resolve_version(tag: str, allowed: list[str], product: str,
                     default: str) -> tuple[str, Note | None]:
-    """Pick the closest supported version, and say so when it is not a match.
-
-    Silently rounding a pinned version up is how a migration tool causes an
-    outage, so an unavailable version is reported rather than absorbed. When
-    nothing is pinned the caller's conservative default wins over the newest
-    release, since an unknown project is less likely to support the latest.
-    """
+    """Pick the closest supported version, and say so when it is not a match."""
     if not tag:
         return default, None
     match = re.match(r"^(\d+)(?:\.(\d+))?", tag)
