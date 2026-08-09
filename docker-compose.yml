@@ -1,15 +1,32 @@
 services:
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/var/www:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+
   api:
     build: .
+    image: python:3.12
     ports:
       - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     depends_on:
       - db
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment:
-      PORT: "8000"
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: zeroshift
+      DB_USER: postgres
+      DB_PASS: dev-secret-do-not-use-in-prod
 
   db:
     image: postgres:17
     environment:
-      POSTGRES_PASSWORD: localdev
+      POSTGRES_DB: zeroshift
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev-secret-do-not-use-in-prod

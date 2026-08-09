@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zeroshift</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1><a href="/">Zeroshift</a></h1>
+      <span class="tagline">docker-compose &rarr; Zerops, with the gotchas surfaced</span>
+    </div>
+  </header>
+
+  <form id="form">
+    <h2>Your docker-compose.yml</h2>
+    <textarea id="compose" name="compose" spellcheck="false"
+      placeholder="paste your docker-compose.yml here" required></textarea>
+    <div class="controls">
+      <label for="project_name">Project name</label>
+      <input type="text" id="project_name" name="project_name" value="migrated"
+        pattern="[a-zA-Z0-9-]+" maxlength="25">
+      <label class="check"><input type="checkbox" id="share" checked> create share link</label>
+      <button type="submit" id="submit">Translate</button>
+      <button type="button" class="ghost" id="sample">load a sample</button>
+    </div>
+  </form>
+
+  <div id="error" class="alert" hidden></div>
+  <div id="result" hidden></div>
+
+  <footer>
+    Service mappings are derived from the official Zerops JSON Schema, and every
+    generated file is validated against it before you see it.
+  </footer>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

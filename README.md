@@ -152,6 +152,44 @@ access.** The service returned 502 until `zcli service enable-subdomain`. The
 key is accepted and silently insufficient, so the generated file now carries a
 note telling you to run that command.
 
+## AI usage disclosure
+
+Built with the help of [Claude Code](https://claude.com/claude-code), using Claude as a pair-programming and research assistant under my direction. The division of labour was:
+
+**1. Ideation and target selection.**
+I chose the hackathon and defined the core constraint: the project had to solve a problem relevant to Zerops itself, rather than being a generic application deployed on Zerops.
+
+**2. Platform research and service discovery.**
+I researched Zerops' platform, ran `zcli` commands, inspected the deployment behaviour, and worked directly with Zerops' published documentation and schemas. Claude assisted with parsing and organizing this information, including extracting the service catalogue from the official JSON Schema. The resulting service mapping was therefore grounded in Zerops' published schema rather than generated from model knowledge.
+
+**3. Architecture decisions.**
+The architecture was mine. Claude proposed an early five-service design, which I rejected because three services did not have meaningful responsibilities and would have looked like padding. I defined the leaner architecture and added services only when they became genuinely load-bearing.
+
+**4. Implementation.**
+I provided the initial project boilerplate, structure, requirements, and implementation direction. Claude Code then helped write and iterate on substantial portions of the Python code under my review. I established and enforced the coding standards throughout — including no underscore-prefixed function names, module-level imports, and comments only where the reasoning was not self-evident. Several generated implementations were rejected and rewritten to meet these requirements.
+
+**5. Zerops integration and deployment.**
+I performed the actual `zcli` setup and commands, authenticated against my Zerops account, imported the project, configured the deployment, and explicitly authorized commands affecting my machine or account. Claude assisted with command guidance and troubleshooting, but the deployment actions and account-level operations were performed by me.
+
+**6. Debugging and validation.**
+Debugging was collaborative, with both human review and Claude-assisted log analysis. I identified several important issues, including:
+
+* PyYAML generating `&id`/`*id` anchors when services shared a build-command list.
+* Database credentials being injected into every runtime, including a frontend that did not require database access.
+* The three-service requirement on the submission page, which required an architectural change.
+* A GitHub account mismatch before anything was pushed to the wrong repository.
+
+Claude assisted in identifying additional issues from deployment logs, including the `uvicorn: command not found` failure caused by build and runtime using separate containers, and the `failureTimeout` type mismatch between the published schema and the live API.
+
+**7. Documentation and commits.**
+Claude drafted parts of the documentation and commit text, which I reviewed and corrected. I verified factual claims against the actual code and deployment configuration. This caught issues in an early README draft, including an incorrect runtime version, incorrect database version, a claimed SQLite fallback that was actually in-memory, and an incorrect service count.
+
+**8. Demo and submission.**
+I prepared and delivered the demo and completed the submission.
+
+The project was therefore **human-directed and human-validated, with Claude Code used as an implementation and research assistant rather than as the project author**. All architectural decisions, `zcli` operations, deployment actions, validation, and final submission were under my control.
+
+
 ## Limits
 
 Honest about scope. `deploy` and `x-` extension fields are ignored.

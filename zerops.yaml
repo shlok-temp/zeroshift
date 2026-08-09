@@ -1,4 +1,21 @@
 zerops:
+- setup: frontend
+  build:
+    base: ubuntu@24.04
+    deployFiles:
+    - frontend
+  run:
+    base: "ubuntu/nginx@latest"
+    ports:
+    - port: 80
+      httpSupport: true
+    documentRoot: frontend
+    siteConfigPath: frontend/nginx.conf
+    healthCheck:
+      httpGet:
+        port: 80
+        path: /
+      failureTimeout: 60s
 - setup: api
   build:
     base: "ubuntu/python@3.12"
@@ -22,7 +39,6 @@ zerops:
       failureTimeout: 60s
     start: "uvicorn app.main:app --host 0.0.0.0 --port 8000"
     envVariables:
-      PORT: '8000'
       DB_HOST: db
       DB_PORT: '5432'
       DB_NAME: db
