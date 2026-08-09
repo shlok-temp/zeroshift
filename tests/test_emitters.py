@@ -24,3 +24,34 @@ def test_managed_database_gets_no_prepare_commands():
     doc = yaml.safe_load(render_zerops_yaml(translate(compose)))
     for setup in doc["zerops"]:
         assert "prepareCommands" not in setup.get("run", {})
+
+
+MULTI_SERVICE = """
+services:
+  frontend:
+    build: ./frontend
+    image: node:20
+    ports: ["3000:3000"]
+  api:
+    build: ./api
+    image: node:20
+    ports: ["4000:4000"]
+    command: node server.js
+    depends_on: [db]
+  db:
+    image: postgres:16
+"""
+
+
+def test_yaml_has_no_anchors_or_aliases():
+    """Services sharing a list object must not emit &id / *id references."""
+    out = render_zerops_yaml(translate(MULTI_SERVICE))
+    assert "&id" not in out
+    assert "*id" not in out
+
+
+def test_credentials_go_only_to_dependent_services():
+    doc = yaml.safe_load(render_zerops_yaml(translate(MULTI_SERVICE)))
+    setups = {s["setup"]: s for s in doc["zerops"]}
+    assert "DB_PASS" in setups["api"]["run"]["envVariables"]
+    assert "DB_PASS" not in setups["frontend"]["run"].get("envVariables", {})

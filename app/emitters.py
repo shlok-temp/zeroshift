@@ -61,6 +61,9 @@ DEPLOY_FILES = {
 class YamlEmitter(yaml.SafeDumper):
     """Block-style dumper that quotes only where YAML would misread a value."""
 
+    def ignore_aliases(self, data):
+        return True
+
 
 def needs_quotes(value: str) -> bool:
     if value in AMBIGUOUS_SCALARS or value.startswith(("<@", "{{", "${")):
@@ -159,7 +162,8 @@ def import_document(translation: Translation, project_name: str | None = None,
 def zerops_document(translation: Translation) -> dict[str, Any]:
     """Only runtime services need a build/run definition."""
     entries: list[dict[str, Any]] = []
-    managed = [s for s in translation.services if s.kind in ("database", "storage")]
+    managed = {s.hostname: s for s in translation.services
+               if s.kind in ("database", "storage")}
 
     for service in translation.services:
         if service.kind not in ("runtime", "docker"):
@@ -170,8 +174,14 @@ def zerops_document(translation: Translation) -> dict[str, Any]:
             entry["build"] = build
 
         run = run_section(service)
+        # Only services that declared depends_on get credentials. A frontend
+        # that never talks to the database should not receive its password.
+        wanted = [managed[name] for name in service.depends_on if name in managed]
+        if not service.depends_on and len(managed) == 1 and len(translation.services) == 2:
+            wanted = list(managed.values())
+
         injected: dict[str, str] = {}
-        for dependency in managed:
+        for dependency in wanted:
             injected.update(connection_variables(dependency))
         if injected:
             run.setdefault("envVariables", {}).update(injected)

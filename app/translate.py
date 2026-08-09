@@ -295,10 +295,12 @@ def translate(compose_text: str, project_name: str = "migrated", ha: bool = Fals
 
         service.secrets = secret_env
         service.command = command
+        service.depends_on = dependencies.get(hostname, [])
         apply_secret_policy(service)
         result.services.append(service)
 
     assign_priorities(result.services, dependencies, renamed_to)
+    resolve_dependency_names(result.services, renamed_to)
     assign_public_service(result)
     check_unsupported_sections(document, result)
     return result
@@ -319,6 +321,13 @@ def assign_priorities(services: list[MappedService], dependencies: dict[str, lis
             provider = by_hostname.get(renamed_to.get(name, name))
             if provider and provider.priority <= dependent.priority:
                 provider.priority = dependent.priority + 1
+
+
+def resolve_dependency_names(services: list[MappedService],
+                             renamed_to: dict[str, str]) -> None:
+    """Rewrite depends_on to the sanitized hostnames services actually get."""
+    for service in services:
+        service.depends_on = [renamed_to.get(name, name) for name in service.depends_on]
 
 
 def assign_public_service(result: Translation) -> None:

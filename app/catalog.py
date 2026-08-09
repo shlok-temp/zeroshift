@@ -37,6 +37,7 @@ class MappedService:
     priority: int = 0
     build_context: str | None = None
     command: str | None = None
+    depends_on: list[str] = field(default_factory=list)
     notes: list[Note] = field(default_factory=list)
 
 
