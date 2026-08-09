@@ -1,0 +1,17 @@
+services:
+  web:
+    build: .
+    ports: ["8000:8000"]
+    depends_on: [db, redis]
+    command: gunicorn myapp.wsgi:application --bind 0.0.0.0:8000
+    environment:
+      DJANGO_SECRET_KEY: dev-key-change-me
+      DEBUG: "false"
+    volumes:
+      - ./media:/app/media
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: pgpass
+  redis:
+    image: redis:7

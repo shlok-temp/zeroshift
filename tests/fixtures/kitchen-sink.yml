@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  My_Web_App:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - cache
+    environment:
+      DEBUG: "false"
+      DATABASE_PASSWORD: supersecret
+      STRIPE_API_KEY: sk_test_123
+    volumes:
+      - ./src:/app/src
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+  db:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpw
+
+  cache:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+
+  search:
+    image: elasticsearch:8.16.0
+
+  analytics:
+    image: mongo:7
+    volumes:
+      - mongodata:/data/db
+
+  queue:
+    image: rabbitmq:3-management
+
+  files:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+
+  proxy:
+    image: nginx:1.25
+    ports:
+      - "80:80"
+
+volumes:
+  dbdata:
+  mongodata:
+
+networks:
+  frontend:
+  backend:

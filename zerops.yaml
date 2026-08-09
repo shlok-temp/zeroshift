@@ -1,0 +1,30 @@
+zerops:
+- setup: api
+  build:
+    base: "ubuntu/python@3.12"
+    buildCommands:
+    - pip install -r requirements.txt
+    deployFiles:
+    - ./
+    addToRunPrepare:
+    - requirements.txt
+  run:
+    base: "ubuntu/python@3.12"
+    prepareCommands:
+    - pip install -r requirements.txt
+    ports:
+    - port: 8000
+      httpSupport: true
+    healthCheck:
+      httpGet:
+        port: 8000
+        path: /health
+      failureTimeout: 60s
+    start: "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    envVariables:
+      PORT: '8000'
+      DB_HOST: db
+      DB_PORT: '5432'
+      DB_NAME: db
+      DB_USER: db
+      DB_PASS: "${db_password}"

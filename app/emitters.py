@@ -1,0 +1,196 @@
+"""Render Zerops YAML artifacts from a translated service graph."""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+import yaml
+
+from app.catalog import MappedService
+from app.translate import Translation
+from app.validate import is_buildable
+
+AMBIGUOUS_SCALARS = {"yes", "no", "true", "false", "null", "on", "off", "y", "n"}
+SPECIAL_CHARS = re.compile(r"[:#\[\]{},&*!|>'\"%@`\n]")
+
+CONNECTION_VARS = {
+    "postgresql": {"DB_HOST": "{host}", "DB_PORT": "5432", "DB_NAME": "{host}",
+                   "DB_USER": "{host}", "DB_PASS": "${{{host}_password}}"},
+    "mariadb": {"DB_HOST": "{host}", "DB_PORT": "3306", "DB_NAME": "{host}",
+                "DB_USER": "{host}", "DB_PASS": "${{{host}_password}}"},
+    "valkey": {"REDIS_URL": "redis://{host}:6379"},
+    "kafka": {"KAFKA_BROKERS": "{host}:9092"},
+    "clickhouse": {"CLICKHOUSE_HOST": "{host}", "CLICKHOUSE_PORT": "8123"},
+    "elasticsearch": {"ELASTICSEARCH_URL": "http://{host}:9200"},
+    "nats": {"NATS_URL": "nats://{host}:4222"},
+    "qdrant": {"QDRANT_URL": "http://{host}:6333"},
+    "meilisearch": {"MEILISEARCH_URL": "http://{host}:7700"},
+    "typesense": {"TYPESENSE_URL": "http://{host}:8108"},
+}
+
+BUILD_COMMANDS = {
+    "python": ["pip install -r requirements.txt"],
+    "nodejs": ["npm ci", "npm run build --if-present"],
+    "bun": ["bun install"],
+    "go": ["go build -o app ."],
+    "rust": ["cargo build --release"],
+    "ruby": ["bundle install"],
+    "java": ["./gradlew build || mvn package"],
+    "dotnet": ["dotnet publish -c Release -o out"],
+}
+
+# Build and runtime are separate containers. Anything pip/gem/bundler installs
+# during the build stays in the build container unless it is either deployed as
+# a file or reinstalled in run.prepareCommands. Compiled languages ship a single
+# binary through deployFiles, so only the interpreted ones need this.
+RUNTIME_DEPENDENCIES = {
+    "python": {"manifest": "requirements.txt", "install": "pip install -r requirements.txt"},
+    "ruby": {"manifest": "Gemfile", "install": "bundle install"},
+}
+
+DEPLOY_FILES = {
+    "python": ["./"],
+    "nodejs": ["./dist", "package.json", "node_modules"],
+    "go": ["app"],
+    "rust": ["target/release/"],
+    "ruby": ["./"],
+    "dotnet": ["out"],
+}
+
+
+class YamlEmitter(yaml.SafeDumper):
+    """Block-style dumper that quotes only where YAML would misread a value."""
+
+
+def needs_quotes(value: str) -> bool:
+    if value in AMBIGUOUS_SCALARS or value.startswith(("<@", "{{", "${")):
+        return True
+    return bool(SPECIAL_CHARS.search(value))
+
+
+def represent_string(dumper: yaml.SafeDumper, value: str):
+    style = '"' if needs_quotes(value) else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", value, style=style)
+
+
+YamlEmitter.add_representer(str, represent_string)
+
+
+def language_of(base: str) -> str | None:
+    for language in ("python", "nodejs", "bun", "go", "rust", "ruby", "java", "dotnet"):
+        if language in base:
+            return language
+    return None
+
+
+def connection_variables(service: MappedService) -> dict[str, str]:
+    """Environment variables a dependent app uses to reach this managed service."""
+    family = service.type.split(":")[0]
+    template = CONNECTION_VARS.get(family)
+    if not template:
+        return {}
+    return {key: value.format(host=service.hostname) for key, value in template.items()}
+
+
+def build_section(service: MappedService) -> dict[str, Any] | None:
+    """Docker, nginx and static bases are runnable but not buildable by Zerops."""
+    if not is_buildable(service.type):
+        return None
+    section: dict[str, Any] = {"base": service.type}
+    language = language_of(service.type)
+    if language and language in BUILD_COMMANDS:
+        section["buildCommands"] = BUILD_COMMANDS[language]
+    section["deployFiles"] = DEPLOY_FILES.get(language or "", ["./"])
+    if language == "nodejs":
+        section["cache"] = "node_modules"
+    dependencies = RUNTIME_DEPENDENCIES.get(language or "")
+    if dependencies:
+        section["addToRunPrepare"] = [dependencies["manifest"]]
+    return section
+
+
+HEALTH_CHECK_TIMEOUT = "60s"
+
+
+def run_section(service: MappedService) -> dict[str, Any]:
+    section: dict[str, Any] = {"base": service.type}
+    dependencies = RUNTIME_DEPENDENCIES.get(language_of(service.type) or "")
+    if dependencies and service.kind == "runtime":
+        section["prepareCommands"] = [dependencies["install"]]
+    if service.ports:
+        port = service.ports[0]
+        section["ports"] = [{"port": port, "httpSupport": True}]
+        # The deploy API parses this as a Go duration and rejects a bare integer,
+        # even though the published schema and the docs both type it as one.
+        section["healthCheck"] = {
+            "httpGet": {"port": port, "path": "/"},
+            "failureTimeout": HEALTH_CHECK_TIMEOUT,
+        }
+    if service.command:
+        section["start"] = service.command
+    if service.env:
+        section["envVariables"] = dict(service.env)
+    return section
+
+
+def import_document(translation: Translation, project_name: str | None = None,
+                    description: str = "Generated by Zeroshift") -> dict[str, Any]:
+    project = {"name": project_name or translation.project_name, "description": description}
+    services: list[dict[str, Any]] = []
+
+    for service in translation.services:
+        entry: dict[str, Any] = {
+            "hostname": service.hostname,
+            "type": service.type,
+            "priority": service.priority,
+        }
+        if service.public:
+            entry["enableSubdomainAccess"] = True
+        if service.kind == "docker":
+            entry["startWithoutCode"] = True
+        if service.secrets:
+            entry["envSecrets"] = dict(service.secrets)
+        if service.kind == "storage":
+            entry["objectStorageSize"] = 2
+        services.append(entry)
+
+    return {"project": project, "services": services}
+
+
+def zerops_document(translation: Translation) -> dict[str, Any]:
+    """Only runtime services need a build/run definition."""
+    entries: list[dict[str, Any]] = []
+    managed = [s for s in translation.services if s.kind in ("database", "storage")]
+
+    for service in translation.services:
+        if service.kind not in ("runtime", "docker"):
+            continue
+        entry: dict[str, Any] = {"setup": service.hostname}
+        build = build_section(service)
+        if build:
+            entry["build"] = build
+
+        run = run_section(service)
+        injected: dict[str, str] = {}
+        for dependency in managed:
+            injected.update(connection_variables(dependency))
+        if injected:
+            run.setdefault("envVariables", {}).update(injected)
+        entry["run"] = run
+        entries.append(entry)
+
+    return {"zerops": entries}
+
+
+def dump_yaml(document: dict[str, Any], preprocessor: bool = False) -> str:
+    body = yaml.dump(document, Dumper=YamlEmitter, sort_keys=False, width=100)
+    return f"#yamlPreprocessor=on\n{body}" if preprocessor else body
+
+
+def render_import_yaml(translation: Translation, **kwargs) -> str:
+    return dump_yaml(import_document(translation, **kwargs), preprocessor=True)
+
+
+def render_zerops_yaml(translation: Translation) -> str:
+    return dump_yaml(zerops_document(translation))
